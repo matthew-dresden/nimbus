@@ -24,7 +24,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           prerelease: true
-          files: dist/*.zip
+          files: |
+            dist/*.zip
+            dist/*.dmg
           body: |
             Nimbus ${{ github.ref_name }} (arm64, macOS 13+)
 
