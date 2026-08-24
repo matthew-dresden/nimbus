@@ -55,4 +55,15 @@ echo "==> zipping"
 rm -f "dist/$APP_NAME-$VERSION-arm64.zip"
 cd dist && zip -qry "$APP_NAME-$VERSION-arm64.zip" "$APP_NAME.app" && cd ..
 
-echo "==> done: dist/$APP_NAME-$VERSION-arm64.zip"
+echo "==> building dmg"
+rm -rf "dist/$APP_NAME-$VERSION-arm64.dmg" dist/dmg-staging
+mkdir -p dist/dmg-staging
+cp -R "$APP" dist/dmg-staging/
+ln -sf /Applications dist/dmg-staging/Applications
+hdiutil create -volname "$APP_NAME $VERSION" \
+  -srcfolder dist/dmg-staging \
+  -ov -format UDZO \
+  "dist/$APP_NAME-$VERSION-arm64.dmg" > /dev/null
+rm -rf dist/dmg-staging
+
+echo "==> done: dist/$APP_NAME-$VERSION-arm64.zip + dist/$APP_NAME-$VERSION-arm64.dmg"

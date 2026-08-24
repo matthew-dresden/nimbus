@@ -14,7 +14,6 @@ final class PreferencesViewController: NSViewController {
             windowController = NSWindowController(window: win)
         }
         windowController?.showWindow(nil)
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     private let prefs = PreferencesManager.shared
@@ -25,6 +24,11 @@ final class PreferencesViewController: NSViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        buildUI()
+    }
+
+    private func rebuildUI() {
+        view.subviews.forEach { $0.removeFromSuperview() }
         buildUI()
     }
 
@@ -115,7 +119,7 @@ final class PreferencesViewController: NSViewController {
         panel.begin { [weak self] response in
             if response == .OK, let url = panel.url {
                 self?.prefs.saveFolder = url
-                self?.viewDidLoad() // refresh UI
+                DispatchQueue.main.async { self?.rebuildUI() }
             }
         }
     }

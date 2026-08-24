@@ -10,6 +10,7 @@ struct Annotation {
     var path: NSBezierPath
     var color: NSColor
     var lineWidth: CGFloat
+    var fontSize: CGFloat = 16
 }
 
 // Protocol all drawing tools conform to.
@@ -121,6 +122,20 @@ struct MarkerTool: DrawingTool {
     func updatePath(_ annotation: inout Annotation, to point: CGPoint) {
         annotation.path.line(to: point)
     }
+}
+
+// Marker for the text tool. The canvas special-cases it with an inline editor;
+// the committed annotation carries the string inside tool.
+struct TextTool: DrawingTool {
+    var cursor: NSCursor { .crosshair }
+
+    func startPath(at point: CGPoint, color: NSColor, lineWidth: CGFloat) -> Annotation {
+        let path = NSBezierPath()
+        path.move(to: point)
+        return Annotation(tool: .text(""), startPoint: point, path: path, color: color, lineWidth: lineWidth)
+    }
+
+    func updatePath(_ annotation: inout Annotation, to point: CGPoint) {}
 }
 
 struct LineTool: DrawingTool {

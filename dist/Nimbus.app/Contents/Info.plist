@@ -5,8 +5,8 @@
   <key>CFBundleName</key>                 <string>Nimbus</string>
   <key>CFBundleDisplayName</key>          <string>Nimbus</string>
   <key>CFBundleIdentifier</key>           <string>com.matthewdresden.nimbus</string>
-  <key>CFBundleVersion</key>              <string>0.1.0-alpha.1</string>
-  <key>CFBundleShortVersionString</key>   <string>0.1.0-alpha.1</string>
+  <key>CFBundleVersion</key>              <string>0.1.0-alpha.2</string>
+  <key>CFBundleShortVersionString</key>   <string>0.1.0-alpha.2</string>
   <key>CFBundleExecutable</key>           <string>Nimbus</string>
   <key>CFBundlePackageType</key>          <string>APPL</string>
   <key>CFBundleIconFile</key>             <string>Nimbus</string>

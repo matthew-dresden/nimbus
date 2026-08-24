@@ -2,11 +2,11 @@ import AppKit
 
 // MARK: - Window Controller (keeps window alive)
 
-final class AnnotationWindowController: NSWindowController {
+final class AnnotationWindowController: NSWindowController, NSWindowDelegate {
 
-    private static var current: AnnotationWindowController?
-    private let toolbarHeight: CGFloat = 40
-    private let toolbarPad: CGFloat = 6
+    static var current: AnnotationWindowController?
+    private var didAutoSave = false
+    var annotationVC: AnnotationViewController?
 
     static func show(screenshot: NSImage, at rect: CGRect, on screen: NSScreen) {
         current = nil // release previous
@@ -16,7 +16,7 @@ final class AnnotationWindowController: NSWindowController {
         let winRect = CGRect(
             x: rect.origin.x,
             y: rect.origin.y - toolbarH - 4,
-            width: max(rect.width, 320),
+            width: max(rect.width, 580),
             height: rect.height + toolbarH + 4
         )
 
@@ -38,6 +38,8 @@ final class AnnotationWindowController: NSWindowController {
         win.contentViewController = vc
 
         let wc = AnnotationWindowController(window: win)
+        wc.annotationVC = vc
+        win.delegate = wc
         current = wc             // assign BEFORE showWindow so it's retained
         wc.showWindow(nil)
         win.makeKeyAndOrderFront(nil)
@@ -47,6 +49,23 @@ final class AnnotationWindowController: NSWindowController {
     func dismiss() {
         close()
         AnnotationWindowController.current = nil
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        defer { AnnotationWindowController.current = nil }
+        guard !didAutoSave, let vc = annotationVC else { return }
+        didAutoSave = true
+
+        // Auto-save honors Preferences > "Auto-save screenshot to folder".
+        guard PreferencesManager.shared.autoSave else { return }
+        let folder = PreferencesManager.shared.saveFolder
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH.mm.ss"
+        let url = folder.appendingPathComponent("Screenshot \(f.string(from: Date())).png")
+        guard let tiff = vc.canvasImage().tiffRepresentation,
+              let bmp = NSBitmapImageRep(data: tiff),
+              let png = bmp.representation(using: .png, properties: [:]) else { return }
+        try? png.write(to: url)
     }
 }
 
@@ -61,6 +80,8 @@ final class AnnotationViewController: NSViewController {
     private var canvas: DrawingCanvas!
     private var selectedToolButton: NSButton?
     private var buttonTools: [NSButton: DrawingTool] = [:]
+
+    func canvasImage() -> NSImage { canvas.renderedImage() }
 
     init(screenshot: NSImage, screenshotSize: CGSize, toolbarHeight: CGFloat) {
         self.screenshot = screenshot
@@ -107,7 +128,8 @@ final class AnnotationViewController: NSViewController {
 
     private func setupToolbar() {
         // Toolbar background
-        let bar = NSView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: toolbarHeight))
+        let barWidth = max(view.bounds.width, 580)
+        let bar = NSView(frame: CGRect(x: 0, y: 0, width: barWidth, height: toolbarHeight))
         bar.wantsLayer = true
         bar.layer?.backgroundColor = NSColor(calibratedRed: 0.15, green: 0.15, blue: 0.15, alpha: 0.95).cgColor
         bar.layer?.cornerRadius = 6
@@ -121,6 +143,7 @@ final class AnnotationViewController: NSViewController {
             ("line.diagonal",       LineTool(),      "Line"),
             ("pencil",              PencilTool(),    "Pencil"),
             ("highlighter",         MarkerTool(),    "Marker"),
+            ("character.cursor.ibeam", TextTool(),   "Text"),
         ]
 
         var x: CGFloat = 6
@@ -142,6 +165,18 @@ final class AnnotationViewController: NSViewController {
         bar.addSubview(colorBtn)
         x += 38
 
+        // Stroke/text size control (S / M / L)
+        let sizeControl = NSSegmentedControl(
+            labels: ["S", "M", "L"],
+            trackingMode: .selectOne,
+            target: self,
+            action: #selector(strokeSizeChanged(_:))
+        )
+        sizeControl.selectedSegment = 1
+        sizeControl.frame = CGRect(x: x + 4, y: 6, width: 92, height: 26)
+        bar.addSubview(sizeControl)
+        x += 102
+
         // Undo
         let undoBtn = toolbarButton(icon: "arrow.uturn.backward", tooltip: "Undo", size: 30)
         undoBtn.frame = CGRect(x: x + 4, y: 5, width: 30, height: 30)
@@ -157,7 +192,7 @@ final class AnnotationViewController: NSViewController {
             ("arrow.up.to.line",      "Upload", #selector(uploadAction)),
         ]
 
-        var rx: CGFloat = view.bounds.width - 6
+        var rx: CGFloat = barWidth - 6
         for (icon, tip, sel) in rightActions {
             rx -= 33
             let btn = toolbarButton(icon: icon, tooltip: tip, size: 30)
@@ -193,6 +228,12 @@ final class AnnotationViewController: NSViewController {
         selectedToolButton?.layer?.backgroundColor = NSColor.clear.cgColor
         sender.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.2).cgColor
         selectedToolButton = sender
+    }
+
+    @objc private func strokeSizeChanged(_ sender: NSSegmentedControl) {
+        // S / M / L -> 0.6x / 1.0x / 1.8x stroke width and text size
+        let scales: [CGFloat] = [0.6, 1.0, 1.8]
+        canvas.lineWidthScale = scales[sender.selectedSegment]
     }
 
     @objc private func pickColor() {
