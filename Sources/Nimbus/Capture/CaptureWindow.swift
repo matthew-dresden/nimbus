@@ -1,12 +1,14 @@
 import AppKit
 
-// Fullscreen transparent overlay window for region selection.
+// Fullscreen transparent overlay window hosting a CaptureSessionView.
 final class CaptureWindow: NSWindow {
 
-    var onSelectionComplete: ((CGRect) -> Void)?
-    var onCancelled: (() -> Void)?
+    let sessionView: CaptureSessionView
+
+    var windowNumberValue: Int { windowNumber }
 
     init(screen: NSScreen) {
+        sessionView = CaptureSessionView(frame: screen.frame)
         super.init(
             contentRect: screen.frame,
             styleMask: [.borderless],
@@ -19,15 +21,7 @@ final class CaptureWindow: NSWindow {
         ignoresMouseEvents = false
         acceptsMouseMovedEvents = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-
-        let selectionView = SelectionView(frame: screen.frame)
-        selectionView.onSelectionComplete = { [weak self] rect in
-            self?.onSelectionComplete?(rect)
-        }
-        selectionView.onCancelled = { [weak self] in
-            self?.onCancelled?()
-        }
-        contentView = selectionView
+        contentView = sessionView
     }
 
     override var canBecomeKey: Bool { true }

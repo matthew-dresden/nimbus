@@ -43,6 +43,13 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key>       <string>13.0</string>
   <key>LSUIElement</key>                  <true/>
   <key>NSHighResolutionCapable</key>      <true/>
+  <key>LSEnvironment</key>
+  <dict>
+    <key>NSZombieEnabled</key>
+    <string>YES</string>
+    <key>MallocStackLogging</key>
+    <string>YES</string>
+  </dict>
   <key>NSHumanReadableCopyright</key>     <string>MIT License - https://github.com/matthew-dresden/nimbus</string>
 </dict>
 </plist>
