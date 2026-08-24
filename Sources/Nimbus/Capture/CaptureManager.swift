@@ -8,6 +8,26 @@ final class CaptureManager {
 
     func startCapture() {
         guard !sessionActive else { return } // ignore hotkey mid-session
+
+        // Without this permission macOS silently serves desktop-only captures.
+        if !CGPreflightScreenCaptureAccess() {
+            CGRequestScreenCaptureAccess()
+            DispatchQueue.main.async {
+                let alert = NSAlert()
+                alert.messageText = "Screen Recording permission required"
+                alert.informativeText = """
+                    Nimbus needs Screen Recording permission to capture regions. \
+                    Enable it in System Settings > Privacy & Security > Screen Recording \
+                    (toggle Nimbus on - remove and re-add if already listed), then press Cmd+4 again.
+                    """
+                alert.addButton(withTitle: "Open System Settings")
+                alert.addButton(withTitle: "Later")
+                if alert.runModal() == .alertFirstButtonReturn {
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
+                }
+            }
+            return
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
             self?.showOverlay()
         }
@@ -38,14 +58,11 @@ final class CaptureManager {
                         pointSize: rect.size
                     )
                 } catch {
-                    self.endSession(window)
-                    DispatchQueue.main.async {
-                        let alert = NSAlert()
-                        alert.messageText = "Capture failed"
-                        alert.informativeText = error.localizedDescription
-                        alert.addButton(withTitle: "OK")
-                        alert.runModal()
-                    }
+                    // Mid-session refresh failures keep the session alive -
+                    // the user keeps their marks and can retry or just save.
+                    window.sessionView.showStatusBadge(
+                        "Capture refresh failed: \(error.localizedDescription)"
+                    )
                 }
             }
         }

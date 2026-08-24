@@ -54,6 +54,10 @@ final class CaptureSessionView: NSView {
     private var textEditor: NSTextField?
     private var textEditPoint: CGPoint = .zero   // view space
 
+    private var statusBadge: String?
+    private var statusBadgeCenter: CGPoint = .zero
+    private var statusBadgeClear: DispatchWorkItem?
+
     // MARK: - Toolbar
 
     private var toolbar: NSView?
@@ -105,7 +109,26 @@ final class CaptureSessionView: NSView {
 
             strokeSelectionBorder(strong: true)
             drawHandles()
+
+            if let badge = statusBadge {
+                drawBadge(badge, at: statusBadgeCenter)
+            }
         }
+    }
+
+    /// Transient status message rendered inside the overlay.
+    func showStatusBadge(_ text: String) {
+        statusBadgeClear?.cancel()
+        statusBadge = text
+        statusBadgeCenter = CGPoint(x: bounds.midX,
+                                    y: max(bounds.minY + 8, selectionRect.minY - 30))
+        needsDisplay = true
+        let clear = DispatchWorkItem { [weak self] in
+            self?.statusBadge = nil
+            self?.needsDisplay = true
+        }
+        statusBadgeClear = clear
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2, execute: clear)
     }
 
     private func strokeSelectionBorder(strong: Bool = false) {
@@ -257,7 +280,7 @@ final class CaptureSessionView: NSView {
         }
 
         guard isDraggingSelection, selectionRect.width > 5, selectionRect.height > 5 else {
-            onSessionComplete?()
+            finishSessionAsync()
             return
         }
         isDraggingSelection = false
@@ -269,7 +292,7 @@ final class CaptureSessionView: NSView {
             if textEditor != nil {
                 cancelTextEditor()
             } else {
-                onSessionComplete?()
+                finishSessionAsync()
             }
             return
         }
@@ -307,7 +330,7 @@ final class CaptureSessionView: NSView {
             needsDisplay = true
             return
         }
-        onSessionComplete?()   // click outside the selection ends the session
+        finishSessionAsync()   // click outside the selection ends the session
     }
 
     private func handleEditDrag(_ point: CGPoint) {
@@ -334,6 +357,13 @@ final class CaptureSessionView: NSView {
     }
 
     private func handleEditMouseUp(_ point: CGPoint) {
+        if interaction == .moving {
+            // Viewfinder behavior: re-capture whatever sits under the moved selection.
+            interaction = .none
+            showStatusBadge("Refreshing...")
+            onFreezeRequested?(selectionRect)
+            return
+        }
         if interaction == .none, let annotation = currentAnnotation {
             annotations.append(annotation)
             currentAnnotation = nil
@@ -427,6 +457,9 @@ final class CaptureSessionView: NSView {
     // MARK: - Toolbar
 
     private func setupToolbar() {
+        toolbar?.removeFromSuperview()
+        buttonTools.removeAll()
+        selectedToolButton = nil
         let barWidth: CGFloat = 600
         let bar = NSView(frame: CGRect(x: 0, y: 0, width: barWidth, height: 44))
         bar.wantsLayer = true
@@ -562,25 +595,44 @@ final class CaptureSessionView: NSView {
     }
 
     @objc private func closeAction() {
-        onSessionComplete?()
+        finishSessionAsync()
+    }
+
+    /// Teardown must never run synchronously inside the view's own event
+    /// handler - AppKit still touches this view (and its subview arrays) after
+    /// the handler returns, which is exactly how use-after-free crashes happen.
+    func finishSessionAsync() {
+        commitTextEditor()
+        NSColorPanel.shared.setTarget(nil)
+        NSColorPanel.shared.setAction(nil)
+        statusBadgeClear?.cancel()
+        DispatchQueue.main.async { [weak self] in
+            self?.onSessionComplete?()
+        }
     }
 
     @objc private func copyAction() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.writeObjects([composedImage()])
-        drawBadge("Copied!", at: CGPoint(x: bounds.midX, y: selectionRect.minY - 28))
+        showStatusBadge("Copied to clipboard")
     }
 
     @objc private func saveAction() {
-        writeComposedPNG()
-        drawBadge("Saved!", at: CGPoint(x: bounds.midX, y: selectionRect.minY - 28))
+        if let err = writeComposedPNG() {
+            showStatusBadge(err)
+        } else {
+            showStatusBadge("Saved!")
+        }
     }
 
     @objc private func saveAndCopyAction() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.writeObjects([composedImage()])
-        writeComposedPNG()
-        drawBadge("Saved + Copied!", at: CGPoint(x: bounds.midX, y: selectionRect.minY - 28))
+        if let err = writeComposedPNG() {
+            showStatusBadge(err)
+        } else {
+            showStatusBadge("Saved + Copied!")
+        }
     }
 
     @objc private func uploadAction() {
@@ -592,9 +644,9 @@ final class CaptureSessionView: NSView {
                 case .success(let url):
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(url, forType: .string)
-                    self.drawBadge("Link copied!", at: CGPoint(x: self.bounds.midX, y: self.selectionRect.minY - 28))
+                    self.showStatusBadge("Link copied!")
                 case .failure(let error):
-                    self.drawBadge(error.localizedDescription, at: CGPoint(x: self.bounds.midX, y: self.selectionRect.minY - 28))
+                    self.showStatusBadge("Upload failed: \(error.localizedDescription)")
                 }
             }
         }
@@ -690,15 +742,22 @@ final class CaptureSessionView: NSView {
         return image
     }
 
-    private func writeComposedPNG() {
-        let folder = PreferencesManager.shared.saveFolder
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH.mm.ss"
-        let url = folder.appendingPathComponent("Screenshot \(f.string(from: Date())).png")
-        guard let tiff = composedImage().tiffRepresentation,
-              let bmp = NSBitmapImageRep(data: tiff),
-              let png = bmp.representation(using: .png, properties: [:]) else { return }
-        try? png.write(to: url)
+    private func writeComposedPNG() -> String? {
+        do {
+            let folder = PreferencesManager.shared.saveFolder
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH.mm.ss"
+            let url = folder.appendingPathComponent("Screenshot \(f.string(from: Date())).png")
+            guard let tiff = composedImage().tiffRepresentation,
+                  let bmp = NSBitmapImageRep(data: tiff),
+                  let png = bmp.representation(using: .png, properties: [:]) else {
+                return "Save failed: could not encode PNG"
+            }
+            try png.write(to: url)
+            return nil
+        } catch {
+            return "Save failed: \(error.localizedDescription)"
+        }
     }
 }
 
