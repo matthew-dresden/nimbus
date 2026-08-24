@@ -17,9 +17,15 @@ final class PreferencesManager {
         case saveFolderPath  = "NimbusSaveFolderPath"
         case autoCopyURL     = "NimbusAutoCopyURL"
         case autoSave        = "NimbusAutoSave"
+        case imgurClientID   = "NimbusImgurClientID"
     }
 
     // MARK: - Properties
+
+    var imgurClientID: String {
+        get { defaults.string(forKey: Key.imgurClientID.rawValue) ?? "" }
+        set { defaults.set(newValue, forKey: Key.imgurClientID.rawValue) }
+    }
 
     var hotKeyCode: Int {
         get { defaults.integer(forKey: Key.hotKeyCode.rawValue).nonZero ?? 21 } // default: '4'

@@ -8,11 +8,15 @@ let package = Package(
         .executableTarget(
             name: "Nimbus",
             path: "Sources/Nimbus",
-            resources: [.process("../../Resources")],
             linkerSettings: [
                 .linkedFramework("Carbon"),
                 .linkedFramework("AppKit")
             ]
+        ),
+        .testTarget(
+            name: "NimbusTests",
+            dependencies: ["Nimbus"],
+            path: "Tests/NimbusTests"
         )
     ]
 )

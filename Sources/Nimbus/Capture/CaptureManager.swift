@@ -11,7 +11,10 @@ final class CaptureManager {
     }
 
     private func showOverlay() {
-        guard let screen = NSScreen.main else { return }
+        // Capture on the screen the cursor is currently on (multi-monitor support).
+        let mouse = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
+        guard let screen else { return }
         captureWindow = CaptureWindow(screen: screen)
         captureWindow?.onSelectionComplete = { [weak self] rect in
             self?.captureRegion(rect, on: screen)

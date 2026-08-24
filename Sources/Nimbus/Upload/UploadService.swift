@@ -8,9 +8,13 @@ final class UploadService {
     static let shared = UploadService()
     private init() {}
 
-    private let imgurClientID = "YOUR_IMGUR_CLIENT_ID" // Get free at api.imgur.com
-
     func upload(image: NSImage, completion: @escaping (Result<String, Error>) -> Void) {
+        let clientID = PreferencesManager.shared.imgurClientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clientID.isEmpty else {
+            completion(.failure(UploadError.missingClientID))
+            return
+        }
+
         guard let tiff = image.tiffRepresentation,
               let bitmap = NSBitmapImageRep(data: tiff),
               let png = bitmap.representation(using: .png, properties: [:]) else {
@@ -22,7 +26,7 @@ final class UploadService {
 
         var request = URLRequest(url: URL(string: "https://api.imgur.com/3/image")!)
         request.httpMethod = "POST"
-        request.setValue("Client-ID \(imgurClientID)", forHTTPHeaderField: "Authorization")
+        request.setValue("Client-ID \(clientID)", forHTTPHeaderField: "Authorization")
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = "image=\(base64)&type=base64".data(using: .utf8)
 
@@ -56,11 +60,13 @@ final class UploadService {
     enum UploadError: LocalizedError {
         case imageEncodingFailed
         case invalidResponse
+        case missingClientID
 
         var errorDescription: String? {
             switch self {
             case .imageEncodingFailed: return "Failed to encode image"
             case .invalidResponse:    return "Invalid server response"
+            case .missingClientID:    return "No Imgur client ID configured. Set it in Nimbus Preferences (register free at api.imgur.com)."
             }
         }
     }

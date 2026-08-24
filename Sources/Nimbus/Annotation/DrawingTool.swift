@@ -6,6 +6,7 @@ struct Annotation {
         case arrow, rectangle, ellipse, line, pencil, marker, text(String)
     }
     var tool: Tool
+    var startPoint: CGPoint
     var path: NSBezierPath
     var color: NSColor
     var lineWidth: CGFloat
@@ -24,12 +25,11 @@ struct ArrowTool: DrawingTool {
     var cursor: NSCursor { .crosshair }
 
     func startPath(at point: CGPoint, color: NSColor, lineWidth: CGFloat) -> Annotation {
-        Annotation(tool: .arrow, path: NSBezierPath(), color: color, lineWidth: lineWidth)
+        Annotation(tool: .arrow, startPoint: point, path: NSBezierPath(), color: color, lineWidth: lineWidth)
     }
 
     func updatePath(_ annotation: inout Annotation, to point: CGPoint) {
-        let start = annotation.path.isEmpty ? point : annotation.path.currentPoint
-        annotation.path = arrowPath(from: start, to: point, lineWidth: annotation.lineWidth)
+        annotation.path = arrowPath(from: annotation.startPoint, to: point, lineWidth: annotation.lineWidth)
     }
 
     private func arrowPath(from start: CGPoint, to end: CGPoint, lineWidth: CGFloat) -> NSBezierPath {
@@ -59,15 +59,18 @@ struct RectangleTool: DrawingTool {
     var cursor: NSCursor { .crosshair }
 
     func startPath(at point: CGPoint, color: NSColor, lineWidth: CGFloat) -> Annotation {
-        Annotation(tool: .rectangle, path: NSBezierPath(rect: .zero), color: color, lineWidth: lineWidth)
+        Annotation(tool: .rectangle, startPoint: point, path: NSBezierPath(), color: color, lineWidth: lineWidth)
     }
 
     func updatePath(_ annotation: inout Annotation, to point: CGPoint) {
-        guard let start = annotation.path.isEmpty ? nil : Optional(annotation.path.currentPoint) else { return }
         let rect = CGRect(
-            x: min(start.x, point.x), y: min(start.y, point.y),
-            width: abs(point.x - start.x), height: abs(point.y - start.y)
+            x: min(annotation.startPoint.x, point.x), y: min(annotation.startPoint.y, point.y),
+            width: abs(point.x - annotation.startPoint.x), height: abs(point.y - annotation.startPoint.y)
         )
+        guard rect.width > 0, rect.height > 0 else {
+            annotation.path = NSBezierPath()
+            return
+        }
         annotation.path = NSBezierPath(rect: rect)
     }
 }
@@ -76,15 +79,18 @@ struct EllipseTool: DrawingTool {
     var cursor: NSCursor { .crosshair }
 
     func startPath(at point: CGPoint, color: NSColor, lineWidth: CGFloat) -> Annotation {
-        Annotation(tool: .ellipse, path: NSBezierPath(ovalIn: .zero), color: color, lineWidth: lineWidth)
+        Annotation(tool: .ellipse, startPoint: point, path: NSBezierPath(), color: color, lineWidth: lineWidth)
     }
 
     func updatePath(_ annotation: inout Annotation, to point: CGPoint) {
-        guard let start = annotation.path.isEmpty ? nil : Optional(annotation.path.currentPoint) else { return }
         let rect = CGRect(
-            x: min(start.x, point.x), y: min(start.y, point.y),
-            width: abs(point.x - start.x), height: abs(point.y - start.y)
+            x: min(annotation.startPoint.x, point.x), y: min(annotation.startPoint.y, point.y),
+            width: abs(point.x - annotation.startPoint.x), height: abs(point.y - annotation.startPoint.y)
         )
+        guard rect.width > 0, rect.height > 0 else {
+            annotation.path = NSBezierPath()
+            return
+        }
         annotation.path = NSBezierPath(ovalIn: rect)
     }
 }
@@ -95,7 +101,7 @@ struct PencilTool: DrawingTool {
     func startPath(at point: CGPoint, color: NSColor, lineWidth: CGFloat) -> Annotation {
         let path = NSBezierPath()
         path.move(to: point)
-        return Annotation(tool: .pencil, path: path, color: color, lineWidth: lineWidth)
+        return Annotation(tool: .pencil, startPoint: point, path: path, color: color, lineWidth: lineWidth)
     }
 
     func updatePath(_ annotation: inout Annotation, to point: CGPoint) {
@@ -109,7 +115,7 @@ struct MarkerTool: DrawingTool {
     func startPath(at point: CGPoint, color: NSColor, lineWidth: CGFloat) -> Annotation {
         let path = NSBezierPath()
         path.move(to: point)
-        return Annotation(tool: .marker, path: path, color: color, lineWidth: lineWidth * 4)
+        return Annotation(tool: .marker, startPoint: point, path: path, color: color, lineWidth: lineWidth * 4)
     }
 
     func updatePath(_ annotation: inout Annotation, to point: CGPoint) {
@@ -119,18 +125,16 @@ struct MarkerTool: DrawingTool {
 
 struct LineTool: DrawingTool {
     var cursor: NSCursor { .crosshair }
-    private var startPoint: CGPoint?
 
     func startPath(at point: CGPoint, color: NSColor, lineWidth: CGFloat) -> Annotation {
         let path = NSBezierPath()
         path.move(to: point)
-        return Annotation(tool: .line, path: path, color: color, lineWidth: lineWidth)
+        return Annotation(tool: .line, startPoint: point, path: path, color: color, lineWidth: lineWidth)
     }
 
     func updatePath(_ annotation: inout Annotation, to point: CGPoint) {
-        let start = annotation.path.currentPoint
-        annotation.path = NSBezierPath()
-        annotation.path.move(to: start)
+        annotation.path.removeAllPoints()
+        annotation.path.move(to: annotation.startPoint)
         annotation.path.line(to: point)
     }
 }

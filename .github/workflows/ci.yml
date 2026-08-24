@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Build (release)
+        run: swift build -c release
+
+      - name: Test
+        run: swift test
+
+  package:
+    runs-on: macos-14
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build app bundle
+        run: scripts/build-app.sh "${GITHUB_REF_NAME:-0.1.0-alpha.1}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nimbus-app
+          path: dist/*.zip

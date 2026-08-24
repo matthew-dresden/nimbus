@@ -60,6 +60,7 @@ final class AnnotationViewController: NSViewController {
 
     private var canvas: DrawingCanvas!
     private var selectedToolButton: NSButton?
+    private var buttonTools: [NSButton: DrawingTool] = [:]
 
     init(screenshot: NSImage, screenshotSize: CGSize, toolbarHeight: CGFloat) {
         self.screenshot = screenshot
@@ -126,10 +127,9 @@ final class AnnotationViewController: NSViewController {
         for (icon, tool, tip) in drawTools {
             let btn = toolbarButton(icon: icon, tooltip: tip, size: 30)
             btn.frame = CGRect(x: x, y: 5, width: 30, height: 30)
-            btn.tag = Int(x) // unique tag
             btn.action = #selector(selectDrawTool(_:))
             btn.target = self
-            objc_setAssociatedObject(btn, &AssocKey.tool, tool as AnyObject, .OBJC_ASSOCIATION_RETAIN)
+            buttonTools[btn] = tool
             bar.addSubview(btn)
             x += 33
         }
@@ -187,7 +187,7 @@ final class AnnotationViewController: NSViewController {
     // MARK: - Actions
 
     @objc private func selectDrawTool(_ sender: NSButton) {
-        if let tool = objc_getAssociatedObject(sender, &AssocKey.tool) as? DrawingTool {
+        if let tool = buttonTools[sender] {
             canvas.selectedTool = tool
         }
         selectedToolButton?.layer?.backgroundColor = NSColor.clear.cgColor
@@ -234,8 +234,8 @@ final class AnnotationViewController: NSViewController {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(url, forType: .string)
                     self?.showToast("Link copied! 🎉")
-                case .failure:
-                    self?.showToast("Upload failed")
+                case .failure(let error):
+                    self?.showToast(error.localizedDescription)
                 }
             }
         }
@@ -265,6 +265,3 @@ final class AnnotationViewController: NSViewController {
         }
     }
 }
-
-// Associated object key for storing tool on button
-private enum AssocKey { static var tool = "tool" }

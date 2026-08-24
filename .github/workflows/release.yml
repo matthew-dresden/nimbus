@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run tests
+        run: swift test
+
+      - name: Build app bundle
+        run: scripts/build-app.sh "${GITHUB_REF_NAME#v}"
+
+      - name: Create prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          files: dist/*.zip
+          body: |
+            Nimbus ${{ github.ref_name }} (arm64, macOS 13+)
+
+            ## Install
+            1. Download and unzip `Nimbus-*-arm64.zip`
+            2. Drag `Nimbus.app` into `/Applications`
+            3. Launch it (menu bar camera icon), grant Screen Recording permission when prompted
+            4. Press **Cmd+4** anywhere to capture
+
+            Ad-hoc signed build: on first launch, right-click the app and choose **Open**
+            if Gatekeeper complains. Upload requires a free Imgur client ID set in Preferences.
