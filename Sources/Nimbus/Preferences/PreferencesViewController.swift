@@ -13,7 +13,8 @@ final class PreferencesViewController: NSViewController {
             win.center()
             windowController = NSWindowController(window: win)
         }
-        windowController?.showWindow(nil)
+        windowController?.window?.makeKeyAndOrderFront(nil)
+        windowController?.window?.orderFrontRegardless()   // LSUIElement: never hidden behind other apps
     }
 
     private let prefs = PreferencesManager.shared

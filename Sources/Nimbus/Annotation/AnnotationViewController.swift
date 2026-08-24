@@ -28,6 +28,12 @@ final class AnnotationWindowController: NSWindowController, NSWindowDelegate {
         )
         // Use screenSaver-1 so it appears above normal windows but doesn't fight the overlay
         win.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.screenSaverWindow)) - 1)
+        // Never let the panel land off-screen (small selections near screen edges)
+        let visible = screen.visibleFrame
+        win.setFrameOrigin(CGPoint(
+            x: min(max(winRect.origin.x, visible.minX + 4), visible.maxX - winRect.width - 4),
+            y: min(max(winRect.origin.y, visible.minY + 4), visible.maxY - winRect.height - 4)
+        ))
         win.isOpaque = false
         win.backgroundColor = .clear
         win.hasShadow = true
@@ -47,11 +53,17 @@ final class AnnotationWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func dismiss() {
+        // NSColorPanel does not retain its target - detach before the VC dies
+        // so a later color-panel interaction can never hit freed memory.
+        NSColorPanel.shared.setTarget(nil)
+        NSColorPanel.shared.setAction(nil)
         close()
         AnnotationWindowController.current = nil
     }
 
     func windowWillClose(_ notification: Notification) {
+        NSColorPanel.shared.setTarget(nil)
+        NSColorPanel.shared.setAction(nil)
         defer { AnnotationWindowController.current = nil }
         guard !didAutoSave, let vc = annotationVC else { return }
         didAutoSave = true
@@ -187,6 +199,7 @@ final class AnnotationViewController: NSViewController {
         // --- Action buttons (right side) ---
         let rightActions: [(String, String, Selector)] = [
             ("xmark",                 "Close",  #selector(closeAction)),
+            ("checkmark.circle",      "Save + Copy", #selector(saveAndCopyAction)),
             ("square.and.arrow.down", "Save",   #selector(saveAction)),
             ("doc.on.clipboard",      "Copy",   #selector(copyAction)),
             ("arrow.up.to.line",      "Upload", #selector(uploadAction)),
@@ -280,6 +293,30 @@ final class AnnotationViewController: NSViewController {
                 }
             }
         }
+    }
+
+    @objc private func saveAndCopyAction() {
+        let png = renderedPNG()
+        let folder = PreferencesManager.shared.saveFolder
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH.mm.ss"
+        try? png.write(to: folder.appendingPathComponent("Screenshot \(f.string(from: Date())).png"))
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects([canvas.renderedImage()])
+        showToast("Saved + Copied!")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            (self?.view.window?.windowController as? AnnotationWindowController)?.dismiss()
+        }
+    }
+
+    private func renderedPNG() -> NSData {
+        let img = canvas.renderedImage()
+        guard let tiff = img.tiffRepresentation,
+              let bmp = NSBitmapImageRep(data: tiff),
+              let png = bmp.representation(using: .png, properties: [:]) else {
+            return NSData()
+        }
+        return png as NSData
     }
 
     @objc private func closeAction() {
